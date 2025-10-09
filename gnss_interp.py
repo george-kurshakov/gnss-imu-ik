@@ -1,5 +1,4 @@
 import data_reader
-from matplotlib import pyplot as plt
 from datetime import timedelta
 import numpy as np
 import ahrs
