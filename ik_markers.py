@@ -8,8 +8,8 @@ accuracy = 0.001
 visualize = True
 
 # Processing setup files
-imu_placer_setup = "myIMUPlacer_Setup.xml"
-imu_ik_setup = "myIMUIK_Setup.xml"
+imu_placer_setup = "setup\\myIMUPlacer_Setup.xml"
+imu_ik_setup = "setup\\myIMUIK_Setup.xml"
 
 # Input data files
 # .sto quaternion orientations file

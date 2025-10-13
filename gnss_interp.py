@@ -164,21 +164,22 @@ def write_sto(imu_data, path):
                                quat_t_str, quat_l_str, quat_r_str]) + "\n")
 
 
+base_folder = "C:\\Users\\george.kurshakov\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset"
 subject = 's8'
-speed = 'speed_fast'
+speed = 'speed_slow'
 
 gnss_t, _, _ = data_reader.read_gnss(
-    f"D:\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset\\{subject}\\gnss\\{speed}\\straight\\mdp\\t_mdp.pos")
+    f"{base_folder}\\{subject}\\gnss\\{speed}\\straight\\mdp\\t_mdp.pos")
 imu_t = data_reader.read_imu(
-    f"D:\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset\\{subject}\\gnss\\{speed}\\straight\\t.txt", "x-sens")
+    f"{base_folder}\\{subject}\\gnss\\{speed}\\straight\\t.txt")
 gnss_l, _, _ = data_reader.read_gnss(
-    f"D:\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset\\{subject}\\gnss\\{speed}\\straight\\mdp\\lf_mdp.pos")
+    f"{base_folder}\\{subject}\\gnss\\{speed}\\straight\\mdp\\lf_mdp.pos")
 imu_l = data_reader.read_imu(
-    f"D:\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset\\{subject}\\gnss\\{speed}\\straight\\lf.txt", "x-sens")
+    f"{base_folder}\\{subject}\\gnss\\{speed}\\straight\\lf.txt")
 gnss_r, _, _ = data_reader.read_gnss(
-    f"D:\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset\\{subject}\\gnss\\{speed}\\straight\\mdp\\rf_mdp.pos")
+    f"{base_folder}\\{subject}\\gnss\\{speed}\\straight\\mdp\\rf_mdp.pos")
 imu_r = data_reader.read_imu(
-    f"D:\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset\\{subject}\\gnss\\{speed}\\straight\\rf.txt", "x-sens")
+    f"{base_folder}\\{subject}\\gnss\\{speed}\\straight\\rf.txt")
 
 # imu, gnss = shoe.synchronize_gnss_to_imu(imu, gnss)
 
