@@ -2,6 +2,21 @@ import data_reader
 from datetime import timedelta
 import numpy as np
 import ahrs
+from matplotlib import pyplot as plt
+
+# Interpolation mode defines how the GNSS data will be interpolated.
+# 0 - all GNSS points are considered valid, no filtering is applied.
+# 1 - only Q1 (fixed) solutions are valid
+# 2 - only Q1 (fixed) and Q2 (float) solutions are valid
+interp_mode = 0
+
+# Filling large gaps between valid points
+# True - large gaps are linearly interpolated
+# False - large gaps are filled with NaN
+fill_gaps = False
+
+# Maximal gap between valid data to be interpolated
+max_gap = 0.5 # Sec
 
 
 def get_overlap_interval(streams):
@@ -82,26 +97,66 @@ def interpolate_imu_stream(imu_stream, times_target):
     ]
 
 
-def interpolate_gnss_stream(gnss_stream, times_target):
-    times_src = [e.time for e in gnss_stream]
-    baselines = np.array([e.baseline for e in gnss_stream])
-    velocities = np.array([e.vel for e in gnss_stream])
-    covariances = np.array([e.cov for e in gnss_stream])
-    Q_values = np.array([e.Q for e in gnss_stream])
-    nsat_values = np.array([e.nsat for e in gnss_stream])
+def interpolate_gnss_stream(gnss_stream, times_target, interp_mode=0, fill_gaps=True, max_gap=0.5):
+    # --- Step 1. Select valid solution types ---
+    if interp_mode == 1:
+        valid_Q = [1]
+    elif interp_mode == 2:
+        valid_Q = [1, 2]
+    else:
+        valid_Q = [1, 2, 4]
 
-    baseline_interp = interpolate_vector_field(
-        times_target, times_src, baselines)
+    # Filter GNSS epochs by Q
+    gnss_valid = [e for e in gnss_stream if e.Q in valid_Q]
+    print(f"GNSS stream length: {len(gnss_stream)}")
+    print(f"GNSS valid length: {len(gnss_valid)}")
+    if len(gnss_valid) < 2:
+        raise ValueError("Not enough valid GNSS epochs for interpolation")
+
+    # --- Step 2. Prepare arrays ---
+    times_src = [e.time for e in gnss_valid]
+    baselines = np.array([e.baseline for e in gnss_valid])
+    velocities = np.array([e.vel for e in gnss_valid])
+    covariances = np.array([e.cov for e in gnss_valid])
+    Q_values = np.array([e.Q for e in gnss_valid])
+    nsat_values = np.array([e.nsat for e in gnss_valid])
+
+    # --- Step 3. Perform interpolation ---
+    baseline_interp = interpolate_vector_field(times_target, times_src, baselines)
     vel_interp = interpolate_vector_field(times_target, times_src, velocities)
     cov_interp = interpolate_matrix_field(times_target, times_src, covariances)
     Q_interp = nearest_neighbor(times_target, times_src, Q_values)
     nsat_interp = nearest_neighbor(times_target, times_src, nsat_values)
 
+    # --- Step 4. Handle large gaps if required ---
+    if not fill_gaps:
+        # print("Filling gaps with NaN")
+        times_sec = np.array([(t - times_src[0]).total_seconds() for t in times_src])
+        for i, t in enumerate(times_target):
+            t_sec = (t - times_src[0]).total_seconds()
+            # distance to nearest valid GNSS sample
+            gap = np.min(np.abs(times_sec - t_sec))
+            # print(f"Gap: {gap}")
+            if gap > max_gap:
+                baseline_interp[i][:] = np.nan
+                vel_interp[i][:] = np.nan
+                cov_interp[i][:] = np.nan
+                Q_interp[i] = 0
+                nsat_interp[i] = 0
+
+    # --- Step 5. Build output stream ---
     return [
-        data_reader.GNSS_epoch(time=t, baseline=baseline_interp[i], vel=vel_interp[i],
-                        Q=int(Q_interp[i]), nsat=int(nsat_interp[i]), cov=cov_interp[i])
+        data_reader.GNSS_epoch(
+            time=t,
+            baseline=baseline_interp[i],
+            vel=vel_interp[i],
+            Q=int(Q_interp[i]),
+            nsat=int(nsat_interp[i]),
+            cov=cov_interp[i]
+        )
         for i, t in enumerate(times_target)
     ]
+
 
 
 def synchronize_all(imu_streams, gnss_streams, imu_freq=100):
@@ -118,8 +173,12 @@ def synchronize_all(imu_streams, gnss_streams, imu_freq=100):
 
     synced_imus = [interpolate_imu_stream(
         stream, time_grid) for stream in imu_streams]
-    synced_gnss = [interpolate_gnss_stream(
-        stream, time_grid) for stream in gnss_streams]
+    synced_gnss = [interpolate_gnss_stream(stream, time_grid,
+                                       interp_mode=interp_mode,
+                                       fill_gaps=fill_gaps,
+                                       max_gap=max_gap)
+               for stream in gnss_streams]
+
 
     return (*synced_imus, *synced_gnss)
 
@@ -163,24 +222,32 @@ def write_sto(imu_data, path):
             f.write("\t".join([str((imu_data[0][i].time - imu_data[0][0].time).total_seconds()),
                                quat_t_str, quat_l_str, quat_r_str]) + "\n")
 
-
+folder = "C:\\dataset"
 subject = 's8'
 speed = 'speed_fast'
 
 gnss_t, _, _ = data_reader.read_gnss(
-    f"D:\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset\\{subject}\\gnss\\{speed}\\straight\\mdp\\t_mdp.pos")
+    f"{folder}\\{subject}\\gnss\\{speed}\\straight\\mdp\\t_mdp.pos")
 imu_t = data_reader.read_imu(
-    f"D:\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset\\{subject}\\gnss\\{speed}\\straight\\t.txt", "x-sens")
+    f"{folder}\\{subject}\\gnss\\{speed}\\straight\\t.txt")
 gnss_l, _, _ = data_reader.read_gnss(
-    f"D:\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset\\{subject}\\gnss\\{speed}\\straight\\mdp\\lf_mdp.pos")
+    f"{folder}\\{subject}\\gnss\\{speed}\\straight\\mdp\\lf_mdp.pos")
 imu_l = data_reader.read_imu(
-    f"D:\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset\\{subject}\\gnss\\{speed}\\straight\\lf.txt", "x-sens")
+    f"{folder}\\{subject}\\gnss\\{speed}\\straight\\lf.txt")
 gnss_r, _, _ = data_reader.read_gnss(
-    f"D:\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset\\{subject}\\gnss\\{speed}\\straight\\mdp\\rf_mdp.pos")
+    f"{folder}\\{subject}\\gnss\\{speed}\\straight\\mdp\\rf_mdp.pos")
 imu_r = data_reader.read_imu(
-    f"D:\\OneDrive - Lake Lucerne Institute AG\\DART.Gait-MQ - GMQ-12.AirKinematics - Dataset\\{subject}\\gnss\\{speed}\\straight\\rf.txt", "x-sens")
+    f"{folder}\\{subject}\\gnss\\{speed}\\straight\\rf.txt")
 
 # imu, gnss = shoe.synchronize_gnss_to_imu(imu, gnss)
+
+# fig = plt.figure(figsize=(8, 6))
+# ax = fig.add_subplot(111, projection='3d')
+
+# # Plot the trajectories
+# ax.scatter([epoch.baseline[1] for epoch in gnss_t], [epoch.baseline[0] for epoch in gnss_t], [-epoch.baseline[2] for epoch in gnss_t], label='Sternum', linewidth=2)
+# ax.scatter([epoch.baseline[1] for epoch in gnss_l], [epoch.baseline[0] for epoch in gnss_l], [-epoch.baseline[2] for epoch in gnss_l], label='Left foot', linewidth=2)
+# ax.scatter([epoch.baseline[1] for epoch in gnss_r], [epoch.baseline[0] for epoch in gnss_r], [-epoch.baseline[2] for epoch in gnss_r], label='Right foot', linewidth=2)
 
 imu_t, imu_l, imu_r, gnss_t, gnss_l, gnss_r = synchronize_all(
     [imu_t, imu_l, imu_r], [gnss_t, gnss_l, gnss_r], imu_freq=100)
@@ -253,10 +320,41 @@ for i in range(len(imu_r)):
 #     for e in stream:
 #         e.baseline = rotate_z(e.baseline - centroid, theta) + centroid
 
+
+
+# def set_axes_equal(ax):
+#     """Make axes of 3D plot have equal scale."""
+#     x_limits = ax.get_xlim3d()
+#     y_limits = ax.get_ylim3d()
+#     z_limits = ax.get_zlim3d()
+
+#     x_range = abs(x_limits[1] - x_limits[0])
+#     x_middle = np.mean(x_limits)
+#     y_range = abs(y_limits[1] - y_limits[0])
+#     y_middle = np.mean(y_limits)
+#     z_range = abs(z_limits[1] - z_limits[0])
+#     z_middle = np.mean(z_limits)
+
+#     plot_radius = 0.5 * max([x_range, y_range, z_range])
+
+#     ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+#     ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+#     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+# # Apply equal scaling
+# set_axes_equal(ax)
+
+# # Labels and title
+# ax.set_title('Devices 3D Trajectories', fontsize=14)
+# ax.set_xlabel('East [m]')
+# ax.set_ylabel('North [m]')
+# ax.set_zlabel('Up [m]')
+# ax.legend()
+
 write_trc((gnss_t, gnss_l, gnss_r), "my_trc.trc")
 write_sto((imu_t, imu_l, imu_r), "my_sto.sto")
 
-# plt.show()
+plt.show()
 
 
 # After rotation

@@ -8,14 +8,16 @@ accuracy = 0.001
 visualize = True
 
 # Processing setup files
-imu_placer_setup = "myIMUPlacer_Setup.xml"
-imu_ik_setup = "myIMUIK_Setup.xml"
+imu_placer_setup = "setup/myIMUPlacer_Setup.xml"
+imu_ik_setup = "setup/myIMUIK_Setup.xml"
 
 # Input data files
 # .sto quaternion orientations file
 quat_file = "my_sto.sto"
 # .trc GNSS data file (working as markers)
 marker_file = "my_trc.trc"
+# .osim body model file
+model_file = "body_models/s1_calibrated.osim"
 
 # Output file
 joint_file = "recording.sto"
@@ -42,7 +44,7 @@ def main():
     myIMUPlacer = osim.IMUPlacer(imu_placer_setup)
     myIMUPlacer.run(visualizeResults=False)
 
-    model = osim.Model("s1_calibrated.osim")
+    model = osim.Model(model_file)
     model.initSystem()
     model.finalizeConnections()
 
